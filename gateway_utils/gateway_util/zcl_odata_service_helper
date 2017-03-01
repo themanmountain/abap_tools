@@ -1,0 +1,285 @@
+class ZCL_ODATA_SERVICE_HELPER definition
+  public
+  final
+  create public .
+
+public section.
+*"* public components of class ZCL_ODATA_SERVICE_HELPER
+*"* do not include other source files here!!!
+
+  class-methods ADD_RESPONSE_HEADER
+    importing
+      !IO_DPC_EXT type ref to /IWBEP/IF_MGW_CONV_SRV_RUNTIME
+      !IV_NAME type STRING
+      !IV_VALUE type STRING .
+  class-methods DISABLE_CACHING
+    importing
+      !IO_DPC_EXT type ref to /IWBEP/IF_MGW_CONV_SRV_RUNTIME .
+  class-methods READ_MANDATORY_KEY_TAB
+    importing
+      !IT_KEY_TAB type /IWBEP/T_MGW_NAME_VALUE_PAIR
+      !IV_KEY_NAME type STRING
+    returning
+      value(RV_KEY_VALUE) type STRING
+    raising
+      /IWBEP/CX_MGW_BUSI_EXCEPTION .
+  class-methods READ_PROPERTY_FILTER_VALUE
+    importing
+      !IV_PROPERTY type STRING
+      !IT_ALL_FILTERS type /IWBEP/T_MGW_SELECT_OPTION
+    returning
+      value(RS_FILTER_VALUE) type STRING .
+  class-methods READ_PROPERTY_FILTERS
+    importing
+      !IV_PROPERTY type STRING
+      !IT_ALL_FILTERS type /IWBEP/T_MGW_SELECT_OPTION
+    returning
+      value(RT_PROPERTY_FILTERS) type /IWBEP/T_COD_SELECT_OPTIONS .
+  type-pools ABAP .
+  class-methods SET_ATTACHMENT_FILE_NAME
+    importing
+      !IO_DPC_EXT type ref to /IWBEP/IF_MGW_CONV_SRV_RUNTIME
+      !IV_FILENAME type STRING
+      !IV_PREVIEW_MODE type BOOLEAN default ABAP_FALSE .
+  class-methods READ_OPTIONAL_KEY_TAB
+    importing
+      !IT_KEY_TAB type /IWBEP/T_MGW_NAME_VALUE_PAIR
+      !IV_KEY_NAME type STRING
+    returning
+      value(RV_KEY_VALUE) type STRING .
+  class-methods GET_HTTP_REQUEST_HEADER
+    importing
+      !IR_REQUEST type ref to /IWBEP/IF_MGW_CORE_SRV_RUNTIME=>TY_S_MGW_REQUEST_CONTEXT
+      !IV_KEY type STRING
+    returning
+      value(RV_VALUE) type STRING .
+  class-methods HANDLE_PAGING
+    importing
+      !IS_PAGING type /IWBEP/S_MGW_PAGING
+    changing
+      !CT_ENTITYSET type STANDARD TABLE .
+protected section.
+*"* protected components of class ZCL_ODATA_SERVICE_HELPER
+*"* do not include other source files here!!!
+private section.
+*"* private components of class ZCL_ODATA_SERVICE_HELPER
+*"* do not include other source files here!!!
+ENDCLASS.
+
+
+
+CLASS ZCL_ODATA_SERVICE_HELPER IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>ADD_RESPONSE_HEADER
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IO_DPC_EXT                     TYPE REF TO /IWBEP/IF_MGW_CONV_SRV_RUNTIME
+* | [--->] IV_NAME                        TYPE        STRING
+* | [--->] IV_VALUE                       TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method ADD_RESPONSE_HEADER.
+
+  data:
+    ls_header type ihttpnvp.
+
+  ls_header-name = iv_name.
+  ls_header-value = iv_value.
+  io_dpc_ext->set_header( ls_header ).
+
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>DISABLE_CACHING
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IO_DPC_EXT                     TYPE REF TO /IWBEP/IF_MGW_CONV_SRV_RUNTIME
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method disable_caching.
+
+  data:
+    ls_header type ihttpnvp.
+
+  ls_header-name = 'Cache-Control'.
+  ls_header-value = 'no-cache, no-store'.
+  io_dpc_ext->set_header( is_header = ls_header ).
+
+  ls_header-name = 'Pragma'.
+  ls_header-value = 'no-cache'.
+  io_dpc_ext->set_header( is_header = ls_header ).
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>GET_HTTP_REQUEST_HEADER
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IR_REQUEST                     TYPE REF TO /IWBEP/IF_MGW_CORE_SRV_RUNTIME=>TY_S_MGW_REQUEST_CONTEXT
+* | [--->] IV_KEY                         TYPE        STRING
+* | [<-()] RV_VALUE                       TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method GET_HTTP_REQUEST_HEADER.
+
+  FIELD-SYMBOLS: <ls_request> type /iwbep/if_mgw_core_srv_runtime=>ty_s_mgw_request_context,
+                 <ls_header> type ihttpnvp.
+
+  assign ir_request->* to <ls_request>.
+  if sy-subrc ne 0.
+    return.
+  endif.
+
+  read table <ls_request>-technical_request-request_header ASSIGNING <ls_header> with key name = iv_key.
+  if sy-subrc = 0.
+    rv_value = <ls_header>-value.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>HANDLE_PAGING
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_PAGING                      TYPE        /IWBEP/S_MGW_PAGING
+* | [<-->] CT_ENTITYSET                   TYPE        STANDARD TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method HANDLE_PAGING.
+
+  if is_paging-skip ne 0.
+    delete ct_entityset to is_paging-skip.
+  endif.
+
+  if is_paging-top ne 0.
+    delete ct_entityset from ( is_paging-top + 1 ).
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>READ_MANDATORY_KEY_TAB
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_KEY_TAB                     TYPE        /IWBEP/T_MGW_NAME_VALUE_PAIR
+* | [--->] IV_KEY_NAME                    TYPE        STRING
+* | [<-()] RV_KEY_VALUE                   TYPE        STRING
+* | [!CX!] /IWBEP/CX_MGW_BUSI_EXCEPTION
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method read_mandatory_key_tab.
+
+  data:
+    ls_key_tab like line of it_key_tab.
+
+  read table it_key_tab into ls_key_tab with key name = iv_key_name.
+  if sy-subrc = 0 and ls_key_tab-value is not initial.
+    rv_key_value = ls_key_tab-value.
+  else.
+    raise exception type /iwbep/cx_mgw_busi_exception
+      exporting
+        message = |Error: '| && iv_key_name && |' is a required key|.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>READ_OPTIONAL_KEY_TAB
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_KEY_TAB                     TYPE        /IWBEP/T_MGW_NAME_VALUE_PAIR
+* | [--->] IV_KEY_NAME                    TYPE        STRING
+* | [<-()] RV_KEY_VALUE                   TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method READ_OPTIONAL_KEY_TAB.
+
+  try.
+     rv_key_value = read_mandatory_key_tab(
+         it_key_tab   = it_key_tab    " table for name value pairs
+         iv_key_name  = iv_key_name
+     ).
+   catch /iwbep/cx_mgw_busi_exception.
+     return.
+  endtry.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>READ_PROPERTY_FILTERS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_PROPERTY                    TYPE        STRING
+* | [--->] IT_ALL_FILTERS                 TYPE        /IWBEP/T_MGW_SELECT_OPTION
+* | [<-()] RT_PROPERTY_FILTERS            TYPE        /IWBEP/T_COD_SELECT_OPTIONS
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method READ_PROPERTY_FILTERS.
+
+  data:
+    ls_filter like line of it_all_filters.
+
+  FIELD-SYMBOLS: <ls_property_filter> like line of rt_property_filters.
+
+  " get the filter data for the property
+  read table it_all_filters into ls_filter with key property = iv_property.
+  if sy-subrc = 0.
+    rt_property_filters = ls_filter-select_options.
+
+    loop at rt_property_filters ASSIGNING <ls_property_filter> where low cs '#*' or high cs '#*'.
+      replace all occurrences of '#*' in <ls_property_filter>-low with '*'.
+      replace all occurrences of '#*' in <ls_property_filter>-high with '*'.
+    endloop.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>READ_PROPERTY_FILTER_VALUE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_PROPERTY                    TYPE        STRING
+* | [--->] IT_ALL_FILTERS                 TYPE        /IWBEP/T_MGW_SELECT_OPTION
+* | [<-()] RS_FILTER_VALUE                TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method read_property_filter_value.
+
+  data:
+    ls_filter like line of it_all_filters,
+    ls_property_filter like line of ls_filter-select_options.
+
+  " get the first filter data for the property (if it exists)
+  read table it_all_filters into ls_filter with key property = iv_property.
+  if sy-subrc = 0.
+    read table ls_filter-select_options index 1 into ls_property_filter.
+    if sy-subrc = 0.
+      rs_filter_value = ls_property_filter-low.
+    endif.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ODATA_SERVICE_HELPER=>SET_ATTACHMENT_FILE_NAME
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IO_DPC_EXT                     TYPE REF TO /IWBEP/IF_MGW_CONV_SRV_RUNTIME
+* | [--->] IV_FILENAME                    TYPE        STRING
+* | [--->] IV_PREVIEW_MODE                TYPE        BOOLEAN (default =ABAP_FALSE)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SET_ATTACHMENT_FILE_NAME.
+
+  data: lv_value    type string.
+
+  if iv_preview_mode = abap_true.
+    lv_value = 'inline'.
+  else.
+    lv_value = 'outline'.
+  endif.
+
+  lv_value = lv_value && |; filename="{ iv_filename }";|.
+
+  add_response_header(
+    exporting
+      io_dpc_ext = io_dpc_ext    " Boolean Variable (X=True, -=False, Space=Unknown)
+      iv_name    = 'Content-Disposition'
+      iv_value   = lv_value
+  ).
+
+endmethod.
+ENDCLASS.
