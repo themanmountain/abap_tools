@@ -1,0 +1,103 @@
+  class-methods READ_TEXT_AS_STRING
+    importing
+      !IV_OBJECT type TDOBJECT default 'TEXT'
+      !IV_ID type TDID default 'ST'
+      !IV_NAME type TDOBNAME
+      !IV_CONVERSION type WDY_BOOLEAN optional
+    returning
+      value(RV_TEXT) type STRING .
+      
+method read_text_as_string.
+
+  data: lt_lines          type standard table of tline,
+        lt_bin_text       type tdtab_x256,
+        lv_xstring        type xstring,
+        lv_string         type string,
+        lv_binary_size    type i,
+        lv_line_size      type i,
+        ls_line           type string,
+        lv_len            type i,
+        lo_char_converter type ref to cl_abap_conv_in_ce.
+
+  FIELD-SYMBOLS: <ls_ascii_bin> like line of lt_bin_text,
+                 <ls_line>  like line of lt_lines.
+
+  call function 'READ_TEXT'
+    exporting
+      id       = iv_id   " Text ID of text to be read
+      language = sy-langu    " Language of text to be read
+      name     = iv_name    " Name of text to be read
+      object   = iv_object    " Object of text to be read
+    tables
+      lines    = lt_lines    " Lines of text read
+    exceptions
+      others   = 8.
+  if sy-subrc <> 0 or lt_lines is initial.
+    return.
+  endif.
+
+*--- Just concatenate into a string if no conversion is required
+  if iv_conversion ne abap_true.
+    loop at lt_lines ASSIGNING <ls_line>.
+      case <ls_line>-tdformat.
+        when '/' or '/:'.
+          continue.
+        when '='.
+          rv_text = rv_text && <ls_line>-tdline.
+        when others.
+          if rv_text is not initial.
+            rv_text = rv_text && cl_abap_char_utilities=>cr_lf.
+          endif.
+          rv_text = rv_text && <ls_line>-tdline.
+      endcase.
+    endloop.
+    replace all OCCURRENCES OF ',,' in rv_text with cl_abap_char_utilities=>horizontal_tab.
+    return.
+  endif.
+
+  call function 'CONVERT_ITF_TO_ASCII'
+    exporting
+      codepage          = '4110'    "UTF-8
+      formatwidth       = 0
+      language          = sy-langu    " Language of Original Text
+      tabletype         = 'BIN'    " Type of foreign format table: 'BIN' or 'ASC'
+    importing
+      x_datatab         = lt_bin_text   " Foreign Text Table (Binary)
+      x_size            = lv_binary_size    " Size of X_DATATAB in Bytes
+    tables
+      itf_lines         = lt_lines    " SAPscript ITF Table
+    exceptions
+      invalid_tabletype = 1
+      others            = 2.
+  if sy-subrc <> 0.
+    return.
+  endif.
+
+  loop at lt_bin_text assigning <ls_ascii_bin>.
+    if lv_binary_size >= 256.
+      concatenate lv_xstring <ls_ascii_bin> into lv_xstring in byte mode.
+      subtract 256 from lv_binary_size.
+    else.
+      concatenate lv_xstring <ls_ascii_bin>(lv_binary_size) into lv_xstring in byte mode.
+      exit.
+    endif.
+  endloop.
+
+  "Convert back to a real C-string
+  lo_char_converter = cl_abap_conv_in_ce=>create(
+      encoding    = 'UTF-8'
+      ignore_cerr = abap_true
+      input       = lv_xstring
+  ).
+  lv_line_size = 072.
+  while lo_char_converter->is_at_end is initial.
+    lo_char_converter->read( exporting n = lv_line_size
+                             importing data = ls_line
+                                       len = lv_len
+    ).
+    if lv_len > 0.
+      concatenate rv_text ls_line into rv_text.
+    endif.
+  endwhile.
+  
+endmethod.
