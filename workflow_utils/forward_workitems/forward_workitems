@@ -6,11 +6,12 @@
       
   method _forward_workitems.
 
-  data: lt_task_filter  type swrttask,
-        lt_new_agent    type standard table of swhactor,
-        ls_new_agent    like line of lt_new_agent,
-        lt_worklist     type swr_wihdr_table,
-        ls_object       type sibflporb.
+  data: lt_task_filter        type swrttask,
+        lt_new_agent          type standard table of swhactor,
+        ls_new_agent          like line of lt_new_agent,
+        lt_filtered_worklist  type swr_wihdr_table,
+        lt_worklist           type swr_wihdr_table,
+        ls_object             type sibflporb.
 
   field-symbols: <ls_worklist> like line of lt_worklist.
 
@@ -23,14 +24,30 @@
   select task_id
     from gbapp_c_pr_task
     into table lt_task_filter.
-
-  lt_worklist = zcl_wf_utilities=>get_wf_tasks_for_busobj(
-      it_task_filter = lt_task_filter     " WAPI: Table Type for Tasks
-      is_object      = ls_object    " Local Persistent Object Reference - BOR Compatible
-  ).
-
-*---- Ignore if no workitems
+  
+  call function 'SAP_WAPI_WORKITEMS_TO_OBJECT'
+    exporting
+      object_por               = is_object    " Local Persistent Object Reference - BOR Compatible
+      top_level_items          = ' '
+    tables
+      worklist                 = lt_worklist    " Workflow inbox
+    .
+    
   if lt_worklist is initial.
+    lt_filtered_worklist = lt_worklist.
+  else.
+
+*--- Task Filter parameter doesnt seem to work in the WAPI call - so do the filtering here
+    loop at lt_worklist ASSIGNING <ls_worklist>.
+      read table it_task_filter TRANSPORTING no fields with key WI_RH_TASK = <ls_worklist>-wi_rh_task.
+      if sy-subrc eq 0.
+       append <ls_worklist> to lt_filtered_worklist.
+      endif.
+    endloop.
+  endif.
+ 
+*---- Ignore if no workitems
+  if lt_filtered_worklist is initial.
     return.
   endif.
 
@@ -39,7 +56,7 @@
 
   append ls_new_agent to lt_new_agent.
 
-  loop at lt_worklist assigning <ls_worklist>.
+  loop at lt_filtered_worklist assigning <ls_worklist>.
 
     call function 'SWW_WI_AGENTS_CHANGE'
       exporting
