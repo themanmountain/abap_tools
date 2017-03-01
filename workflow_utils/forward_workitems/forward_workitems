@@ -1,0 +1,62 @@
+  methods _FORWARD_WORKITEMS
+    importing
+      !IV_PR_NUMBER type BANFN
+      !IS_ITEM type MEREQ_ITEM
+      !IV_EXISTING_APPROVER type EBAN-ZZAPPROVER .
+      
+  method _forward_workitems.
+
+  data: lt_task_filter  type swrttask,
+        lt_new_agent    type standard table of swhactor,
+        ls_new_agent    like line of lt_new_agent,
+        lt_worklist     type swr_wihdr_table,
+        ls_object       type sibflporb.
+
+  field-symbols: <ls_worklist> like line of lt_worklist.
+
+*----- Check for existing workflow work items
+  ls_object-typeid = 'BUS2009'.
+  ls_object-catid  = cl_swf_evt_event=>mc_objcateg_bor.
+  ls_object-instid = |{ iv_pr_number }{ is_item-bnfpo }|.
+
+*--- Use the Approve Requisitions app config to determine the task filters
+  select task_id
+    from gbapp_c_pr_task
+    into table lt_task_filter.
+
+  lt_worklist = zcl_wf_utilities=>get_wf_tasks_for_busobj(
+      it_task_filter = lt_task_filter     " WAPI: Table Type for Tasks
+      is_object      = ls_object    " Local Persistent Object Reference - BOR Compatible
+  ).
+
+*---- Ignore if no workitems
+  if lt_worklist is initial.
+    return.
+  endif.
+
+  ls_new_agent-otype = 'US'.
+  ls_new_agent-objid = is_item-zzapprover.
+
+  append ls_new_agent to lt_new_agent.
+
+  loop at lt_worklist assigning <ls_worklist>.
+
+    call function 'SWW_WI_AGENTS_CHANGE'
+      exporting
+        wi_id                      = <ls_worklist>-wi_id    " Work Item ID
+        do_commit                  = 'X'    " Indicator for Control of Commit Logic
+      tables
+        agents                     = lt_new_agent    " Agents for Processing Work Item
+      exceptions
+        no_authorization           = 1
+        update_failed              = 2
+        invalid_type               = 3
+        others                     = 4
+      .
+
+
+  endloop.
+
+endmethod.
+  
+   
